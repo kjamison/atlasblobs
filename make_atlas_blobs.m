@@ -67,7 +67,7 @@ for i = 1:numel(uval)
     %isoval=0.5;
     if(args.volumesmoothing > 0)
         %Vtmp=smooth3(Vtmp);
-        Vtmp=smooth3(Vtmp,'box',args.volumesmoothing);
+        Vtmp=smooth3(Vtmp,'box',max(3,args.volumesmoothing));
         %isoval=.5*max(Vtmp(:))
     end
     FV = isosurface(Vtmp);
