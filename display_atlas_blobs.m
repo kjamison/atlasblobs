@@ -30,6 +30,7 @@ args.addParameter('clim',[]);
 args.addParameter('render',false);
 args.addParameter('roimask',[]);
 args.addParameter('backgroundimage',true);
+args.addParameter('backgroundimage_clim',[-inf inf]);
 args.addParameter('backgroundcolor',[]);
 args.addParameter('surfacesmoothing',0);
 args.addParameter('view',[]);
@@ -188,6 +189,14 @@ for h = 1:numel(hemis)
         
         material(hs,'dull');
         colormap(ax,gray(256));
+        cl=args.backgroundimage_clim;
+        if(isinf(cl(1)) && cl(1)<0)
+            cl(1)=min(atlasblobs.backgroundslice(:));
+        end
+        if(isinf(cl(2)) && cl(2)>0)
+            cl(2)=max(atlasblobs.backgroundslice(:));
+        end
+        set(ax,'clim',cl);
     end
     
 
