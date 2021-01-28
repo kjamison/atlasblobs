@@ -52,9 +52,12 @@ if(~isempty(args.backgroundfile) && exist(args.backgroundfile))
     atlasblobs.backgroundposition=bgxyz;
 end
 
-
-[V,~,scales,~,~,hdr] =read_avw_and_header(atlasfile);
-
+if(ischar(atlasfile) && exist(atlasfile,'file'))
+    [V,~,scales,~,~,hdr] =read_avw_and_header(atlasfile);
+elseif(isstruct(atlasfile) && isfield(atlasfile,'hdr'))
+    V=atlasfile.V;
+    hdr=atlasfile.hdr;
+end
 uval=unique(V(V>0));
 FV_all={};
 fprintf('Generating %d isosurfaces:\n',numel(uval));
