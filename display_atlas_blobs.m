@@ -121,42 +121,50 @@ for h = 1:numel(hemis)
     
     cla(ax);
     for i = 1:numel(roivals)
+        roi_idx=find(atlasblobs.roilabels==i);
+        
         if(~isempty(args.roimask) && ~args.roimask(i))
             continue;
         end
-        if(~hemimask(i) || isnan(roivals(i)))
+        if(isnan(roivals(i)))
             continue;
         end
-        FV=atlasblobs.FV{i};
-        if(args.surfacesmoothing==0)
-            verts_new=FV.vertices;
-        else
-            if(isfield(FV,'conn'))
-                conn=FV.conn;
-            else
-                conn = vertex_neighbours(FV);
+        for ri = 1:numel(roi_idx)
+            iroi=roi_idx(ri);
+            if(~hemimask(iroi))
+                continue;
             end
-            verts_new = mesh_smooth_vertices(FV.vertices, conn,[],args.surfacesmoothing);
-        end
-        patch(ax,struct('vertices',verts_new,'faces',FV.faces),'linestyle','none','facecolor',roicolors(i,:),'facealpha',alphavals(i));
-        
-        if(false)
-            %incomplete test section for drawing text labels
+            FV=atlasblobs.FV{iroi};
+            if(args.surfacesmoothing==0)
+                verts_new=FV.vertices;
+            else
+                if(isfield(FV,'conn'))
+                    conn=FV.conn;
+                else
+                    conn = vertex_neighbours(FV);
+                end
+                verts_new = mesh_smooth_vertices(FV.vertices, conn,[],args.surfacesmoothing);
+            end
+            patch(ax,struct('vertices',verts_new,'faces',FV.faces),'linestyle','none','facecolor',roicolors(i,:),'facealpha',alphavals(i));
 
-            %labelx=min(verts_new(:,1));
-            labelx=0;
-            if(~isempty(atlasblobs.roinames))
-                labelstr=atlasblobs.roinames{i};
-            else
-                labelstr=sprintf('%s.%d',atlasblobs.atlasname,i);
+            if(false)
+                %incomplete test section for drawing text labels
+
+                %labelx=min(verts_new(:,1));
+                labelx=0;
+                if(~isempty(atlasblobs.roinames))
+                    labelstr=atlasblobs.roinames{i};
+                else
+                    labelstr=sprintf('%s.%d',atlasblobs.atlasname,i);
+                end
+                textargs={'verticalalignment','middle','horizontalalignment','center','tag','roilabel'};
+
+                text(ax,labelx,atlasblobs.roicenters(i,2),atlasblobs.roicenters(i,3),labelstr,textargs{:});
             end
-            textargs={'verticalalignment','middle','horizontalalignment','center','tag','roilabel'};
-            
-            text(ax,labelx,atlasblobs.roicenters(i,2),atlasblobs.roicenters(i,3),labelstr,textargs{:});
+            %verts_new=bsxfun(@plus,FVsph.vertices*roiradius(i),roixyz(i,:));
+            %patch(struct('vertices',verts_new,'faces',FVsph.faces),...
+            %    'linestyle','none','facecolor',roicolors(i,:));
         end
-        %verts_new=bsxfun(@plus,FVsph.vertices*roiradius(i),roixyz(i,:));
-        %patch(struct('vertices',verts_new,'faces',FVsph.faces),...
-        %    'linestyle','none','facecolor',roicolors(i,:));
     end
     material(ax,'dull');
     lighting(ax,'phong');
