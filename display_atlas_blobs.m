@@ -35,6 +35,7 @@ args.addParameter('backgroundcolor',[]);
 args.addParameter('surfacesmoothing',0);
 args.addParameter('view',[]);
 args.addParameter('crop',true);
+args.addParameter('hemi',{'lh','rh'});
 
 args.parse(varargin{:});
 args = args.Results;
@@ -95,7 +96,13 @@ set(ax,'NextPlot','add');
 tmpd=tempname;
 mkdir(tmpd);
 
-hemis={'lh','rh'};
+if(isempty(args.hemi) || isequal(args.hemi,'both'))
+    hemis={'lh','rh'};
+elseif(ischar(args.hemi))
+    hemis={args.hemi};
+else
+    hemis=args.hemi;
+end
 
 hcam=[];
     

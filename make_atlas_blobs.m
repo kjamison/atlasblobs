@@ -120,3 +120,13 @@ else
     atlasblobs.hemisphere(roimean(:,1)>=0)={'rh'};
     
 end
+
+seqidx=(1:max(uval))';
+if(~isequal(uval,seqidx))
+    if(numel(uval)~=numel(atlasblobs.roinames) && numel(atlasblobs.roinames)==numel(seqidx))
+        atlasblobs.roinames=atlasblobs.roinames(ismember(seqidx,uval));
+    end
+    if(numel(uval)~=numel(atlasblobs.hemisphere) && numel(atlasblobs.hemisphere)==numel(seqidx))
+        atlasblobs.hemisphere=atlasblobs.hemisphere(ismember(seqidx,uval));
+    end
+end
