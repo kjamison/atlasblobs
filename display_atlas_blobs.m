@@ -4,7 +4,7 @@ function retval = display_atlas_blobs(roivals,atlasblobs,varargin)
 % Required inputs:
 % roivals = Rx1 vector with 1 value per ROI in atlasblobs 
 % atlasblobs = struct (or struct array) generated from make_atlas_blobs()
-%   (or name of file in <sourcedir>/atlases
+%   (or name of atlas or file in <sourcedir>/atlases)
 % 
 % Optional inputs:
 % atlasname = name of atlas to select if atlasblobs is an array
@@ -13,16 +13,17 @@ function retval = display_atlas_blobs(roivals,atlasblobs,varargin)
 % render = true/false. true = render all views off screen and return final
 %    composed image. False = return visible figure for rotation and viewing 
 % roimask = Rx1 vector of true/false to exclude some ROIs if needed
-% backgroundimage = true/false to show pre-determined background slice
+% backgroundimage = 'white','black','none' (or true/false to show slice from atlasblob file)
 %    (selected during make_atlas_blobs())
 % backgroundcolor = [r g b] background color for figure
 % surfacesmoothing = iterations of extra surface smoothing if needed
 % crop = true/false to automatically crop rendered images
+% hemi = 'lh', 'rh', or 'both' (for render=true, defaults to both)
 %
 % Output:
 % HxWx3 RGB image if render=true
 % figure handle if render=false
- 
+
 args = inputParser;
 args.addParameter('atlasname',[]);
 args.addParameter('alpha',[]);
@@ -42,6 +43,8 @@ args.addParameter('hemi',{'lh','rh'});
 
 args.parse(varargin{:});
 args = args.Results;
+
+[sourcedir,~,~]=fileparts(mfilename('fullpath'));
 
 if(ischar(atlasblobs))
     atlasblobs=load_atlas_blobs(atlasblobs);
@@ -66,12 +69,38 @@ if(isempty(args.clim))
     args.clim=[nanmin(roivals(:)) nanmax(roivals(:))];
 end
 
-if(isempty(args.backgroundcolor))
+
+bgslicefile=fullfile(sourcedir,'background_slice.mat');
+bgslice_default=[];
+if(exist(bgslicefile,'file'))
+    bgslice_default=load(bgslicefile);
+end
+
+bgcolor_default=[1 1 1];
+bgslice=atlasblobs.backgroundslice;
+bgslice_alphamap=ones(size(bgslice));
+
+if(~isempty(args.backgroundimage) && (isnumeric(args.backgroundimage) || islogical(args.backgroundimage)))
+    args.backgroundimage=args.backgroundimage>0;
     if(args.backgroundimage)
-        args.backgroundcolor=[0 0 0];
-    else
-        args.backgroundcolor=[1 1 1];
+        bgcolor_default=[0 0 0];
     end
+elseif(strcmpi(args.backgroundimage,'black') && ~isempty(bgslice_default))
+    bgslice=bgslice_default.backgroundslice_blackbg;
+    bgslice_alphamap=bgslice_default.backgroundslice_alpha;
+    bgcolor_default=[0 0 0];
+    args.backgroundimage=true;
+elseif(strcmpi(args.backgroundimage,'white') && ~isempty(bgslice_default))
+    bgslice=bgslice_default.backgroundslice_whitebg;
+    bgslice_alphamap=bgslice_default.backgroundslice_alpha;
+    bgcolor_default=[1 1 1];
+    args.backgroundimage=true;
+else
+    args.backgroundimage=false;
+end
+
+if(isempty(args.backgroundcolor))
+    args.backgroundcolor=bgcolor_default;
 end
 
 render_viewnames=args.render_viewnames;
@@ -119,6 +148,7 @@ else
 end
 
 hcam=[];
+hs_bgslice=[];
 
 img_all={};
 for h = 1:numel(hemis)
@@ -174,7 +204,9 @@ for h = 1:numel(hemis)
         end
     end
     
-    cla(ax);
+    if(args.render)
+        cla(ax);
+    end
     for i = 1:numel(roivals)
         roi_idx=find(atlasblobs.roilabels==i);
         
@@ -227,52 +259,54 @@ for h = 1:numel(hemis)
     if(~isempty(args.view))
         view(ax,args.view);
     end
-    if(~args.render)
-        camlight(ax,'headlight');
-        RotationHeadlight(fig,true);
-    end
 
-    hs=[];
-    if(args.backgroundimage)
+    if(args.backgroundimage && (isempty(hs_bgslice) || ~ishandle(hs_bgslice)))
         %hs=surface(ax,zeros(2,2),'facecolor','texturemap','cdata',atlasblobs.backgroundslice,'linestyle','none');
         %set(hs,'xdata',[0 0]);
         %set(hs,'ydata',atlasblobs.backgroundposition([1 2],2)); %[-126 90]);
         %set(hs,'zdata',reshape(atlasblobs.backgroundposition([1 3; 1 3],3),[2 2])); %[-72 108; -72 108]);
         
         %new style to allow interpolating background slice
-        bgsz=size(atlasblobs.backgroundslice);
+        
+        
+        bgsz=size(bgslice);
         bgpos=atlasblobs.backgroundposition;
         bgxpos=background_nonrender_xposition;
-        hs=surface(ax,zeros(bgsz),'facecolor','interp','cdata',atlasblobs.backgroundslice,'linestyle','none','tag','backgroundslice','facealpha',args.backgroundimage_alpha);
+        
+        cl=args.backgroundimage_clim;
+        if(isinf(cl(1)) && cl(1)<0)
+            cl(1)=min(bgslice(:));
+        end
+        if(isinf(cl(2)) && cl(2)>0)
+            cl(2)=max(bgslice(:));
+        end
+        bgimg_rgb=val2rgb(bgslice,gray(256),cl);
+        bgimg_alpha=bgslice_alphamap*args.backgroundimage_alpha;
+        bgimg_alpha_args={'alphadata',bgimg_alpha,'alphadatamapping','none','facealpha','interp'};
+        
+        %bgimg_alpha_args={'facealpha',args.backgroundimage_alpha};
+        hs_bgslice=surface(ax,zeros(bgsz),'facecolor','interp','cdata',bgimg_rgb,'linestyle','none','tag','backgroundslice',bgimg_alpha_args{:});
 
         [bgz,bgy]=meshgrid(linspace(bgpos(1,3),bgpos(3,3),bgsz(2)),linspace(bgpos(1,2),bgpos(2,2),bgsz(1)));
         
-        set(hs,'xdata',bgxpos+zeros(bgsz));
-        set(hs,'ydata',bgy); %[-126 90]);
-        set(hs,'zdata',bgz); %[-72 108; -72 108]);
+        set(hs_bgslice,'xdata',bgxpos+zeros(bgsz));
+        set(hs_bgslice,'ydata',bgy); %[-126 90]);
+        set(hs_bgslice,'zdata',bgz); %[-72 108; -72 108]);
         
-        material(hs,'dull');
-        colormap(ax,gray(256));
-        cl=args.backgroundimage_clim;
-        if(isinf(cl(1)) && cl(1)<0)
-            cl(1)=min(atlasblobs.backgroundslice(:));
-        end
-        if(isinf(cl(2)) && cl(2)>0)
-            cl(2)=max(atlasblobs.backgroundslice(:));
-        end
-        set(ax,'clim',cl);
+        material(hs_bgslice,'dull');
     end
     
 
     if(~args.render)
-        retval=fig;
-        return;
+        continue;
+        %retval=fig;
+        %return;
     end
 
     for i = 1:numel(viewpoints)
         view(ax,viewpoints{i});
-        if(~isempty(hs))
-            set(hs,'xdata',ones(size(get(hs,'xdata')))*bglayerpos{i});
+        if(~isempty(hs_bgslice) && ishandle(hs_bgslice))
+            set(hs_bgslice,'xdata',ones(size(get(hs_bgslice,'xdata')))*bglayerpos{i});
         end
         if(~isempty(hcam))
             delete(hcam);
@@ -285,6 +319,13 @@ for h = 1:numel(hemis)
         
     end
 end
+if(~args.render)
+    camlight(ax,'headlight');
+    RotationHeadlight(fig,true);
+    retval=fig;
+    return;
+end
+
 close(fig);
 rmdir(tmpd,'s');
 
