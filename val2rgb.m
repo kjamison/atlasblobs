@@ -1,15 +1,15 @@
-function colors = val2rgb(vals,arg2,c_lim)
+function colors = val2rgb(vals,colormap_or_axes,c_lim)
 if(nargin < 2)
-    arg2 = gca;
+    colormap_or_axes = gca;
 end
 
-if(numel(arg2) > 1) %it's a colormap array
-    cmap = arg2;
+if(numel(colormap_or_axes) > 1) %it's a colormap array
+    cmap = colormap_or_axes;
     clim = [min(flatten(vals)) max(flatten(vals))];
     
-elseif(strcmpi(get(arg2,'type'),'axes'))  %it's an axes object
+elseif(strcmpi(get(colormap_or_axes,'type'),'axes'))  %it's an axes object
     cmap = colormap;
-    clim = get(arg2,'clim');
+    clim = get(colormap_or_axes,'clim');
 end
 
 if(nargin > 2)

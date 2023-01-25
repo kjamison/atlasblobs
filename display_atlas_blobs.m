@@ -4,6 +4,7 @@ function retval = display_atlas_blobs(roivals,atlasblobs,varargin)
 % Required inputs:
 % roivals = Rx1 vector with 1 value per ROI in atlasblobs 
 % atlasblobs = struct (or struct array) generated from make_atlas_blobs()
+%   (or name of file in <sourcedir>/atlases
 % 
 % Optional inputs:
 % atlasname = name of atlas to select if atlasblobs is an array
@@ -31,14 +32,20 @@ args.addParameter('render',false);
 args.addParameter('roimask',[]);
 args.addParameter('backgroundimage',true);
 args.addParameter('backgroundimage_clim',[-inf inf]);
+args.addParameter('backgroundimage_alpha',1);
 args.addParameter('backgroundcolor',[]);
 args.addParameter('surfacesmoothing',0);
 args.addParameter('view',[]);
+args.addParameter('render_viewnames',{'lateral','medial'});
 args.addParameter('crop',true);
 args.addParameter('hemi',{'lh','rh'});
 
 args.parse(varargin{:});
 args = args.Results;
+
+if(ischar(atlasblobs))
+    atlasblobs=load_atlas_blobs(atlasblobs);
+end
 
 if(~isempty(args.atlasname) && numel(atlasblobs)>1)
     atlasidx=find(strcmpi({atlasblobs.atlasname},args.atlasname));
@@ -67,6 +74,11 @@ if(isempty(args.backgroundcolor))
     end
 end
 
+render_viewnames=args.render_viewnames;
+if(~iscell(render_viewnames))
+    render_viewnames={render_viewnames};
+end
+
 if(isempty(args.alpha))
     alphavals=ones(size(roivals));
 elseif(numel(args.alpha)==1)
@@ -74,7 +86,9 @@ elseif(numel(args.alpha)==1)
 else
     alphavals=args.alpha/max(args.alpha);
 end
-    
+
+background_nonrender_xposition=0;
+
 roicolors = val2rgb(roivals,args.colormap,args.clim);
 
 if(args.render)
@@ -105,26 +119,60 @@ else
 end
 
 hcam=[];
-    
+
 img_all={};
 for h = 1:numel(hemis)
     hemi=hemis{h};
     
     
     
-    viewnames={'lateral','medial'};
+    
     
     if(strcmpi(hemi,'lh'))
         hemimask=ismember(lower(atlasblobs.hemisphere),{'l','lh','left','both',''});
-        viewpoints={[-90 0],[90 0]};
-        bglayerpos={200,-200};
+        render_viewpoints=struct();
+        render_bgpos=struct();
+        
+        render_viewpoints.lateral=[-90 0];
+        render_bglayerpos.lateral=200;
+        
+        render_viewpoints.medial=[90 0];
+        render_bglayerpos.medial=-200;
+
     elseif(strcmpi(hemi,'rh'))
         hemimask=ismember(lower(atlasblobs.hemisphere),{'r','rh','right','both',''});
-        viewpoints={[90 0],[-90 0]};
-        bglayerpos={-200,200};
+        render_viewpoints=struct();
+        render_bgpos=struct();
+        
+        render_viewpoints.lateral=[90 0];
+        render_bglayerpos.lateral=-200;
+        
+        render_viewpoints.medial=[-90 0];
+        render_bglayerpos.medial=200;
+    end
 
+    viewpoints={};
+    bglayerpos={};
+    viewnames={};
+    for v = 1:numel(render_viewnames)
+        if(~isfield(render_viewpoints,lower(render_viewnames{v})))
+            error('Unknown render viewname %s',render_viewnames{v});
+        end
+        viewnames{v}=lower(render_viewnames{v});
+        viewpoints{v}=render_viewpoints.(lower(render_viewnames{v}));
+        bglayerpos{v}=render_bglayerpos.(lower(render_viewnames{v}));
     end
     
+    
+    if(ischar(args.view))
+        if(strcmpi(args.view,'medial'))
+            args.view=render_viewpoints.medial;
+            background_nonrender_xposition=render_bglayerpos.medial;
+        elseif(strcmpi(args.view,'lateral'))
+            args.view=render_viewpoints.lateral;
+            background_nonrender_xposition=render_bglayerpos.lateral;
+        end
+    end
     
     cla(ax);
     for i = 1:numel(roivals)
@@ -152,8 +200,8 @@ for h = 1:numel(hemis)
                 end
                 verts_new = mesh_smooth_vertices(FV.vertices, conn,[],args.surfacesmoothing);
             end
-            patch(ax,struct('vertices',verts_new,'faces',FV.faces),'linestyle','none','facecolor',roicolors(i,:),'facealpha',alphavals(i));
-
+            hp=patch(ax,struct('vertices',verts_new,'faces',FV.faces),'linestyle','none','facecolor',roicolors(i,:),'facealpha',alphavals(i));
+            set(hp,'tag',sprintf('roi%03d',i));
             if(false)
                 %incomplete test section for drawing text labels
 
@@ -194,11 +242,12 @@ for h = 1:numel(hemis)
         %new style to allow interpolating background slice
         bgsz=size(atlasblobs.backgroundslice);
         bgpos=atlasblobs.backgroundposition;
-        hs=surface(ax,zeros(bgsz),'facecolor','interp','cdata',atlasblobs.backgroundslice,'linestyle','none');
+        bgxpos=background_nonrender_xposition;
+        hs=surface(ax,zeros(bgsz),'facecolor','interp','cdata',atlasblobs.backgroundslice,'linestyle','none','tag','backgroundslice','facealpha',args.backgroundimage_alpha);
 
         [bgz,bgy]=meshgrid(linspace(bgpos(1,3),bgpos(3,3),bgsz(2)),linspace(bgpos(1,2),bgpos(2,2),bgsz(1)));
         
-        set(hs,'xdata',zeros(bgsz));
+        set(hs,'xdata',bgxpos+zeros(bgsz));
         set(hs,'ydata',bgy); %[-126 90]);
         set(hs,'zdata',bgz); %[-72 108; -72 108]);
         
@@ -219,7 +268,7 @@ for h = 1:numel(hemis)
         retval=fig;
         return;
     end
-    
+
     for i = 1:numel(viewpoints)
         view(ax,viewpoints{i});
         if(~isempty(hs))
@@ -245,14 +294,17 @@ if(args.crop)
         [~,croprect{i}] = CropBGColor(img_all{i},img_all{1}(1,1,:));
     end
     croprect=cat(1,croprect{:});
-    croprect=[min(croprect(:,1:2)) max(croprect(:,3:4))];
+    croprect=[min(croprect(:,1:2),[],1) max(croprect(:,3:4),[],1)];
     for i = 1:numel(img_all)
         img_all{i}=img_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
     end
 end
 
-img_new=[[img_all{1}; img_all{2}] [img_all{3}; img_all{4}]];
-
+if(numel(img_all)==4)
+    img_new=[[img_all{1}; img_all{2}] [img_all{3}; img_all{4}]];
+else
+    img_new=cat(2,img_all{:});
+end
 
 retval=img_new;
 %imwrite(img_new,sprintf('~/Downloads/%s_allviews.png',whichatlas));

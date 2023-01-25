@@ -15,11 +15,17 @@ for i = 1:numel(imgs)
         error('must be 2 or 3 dimensional');
     end
 
+    if(isa(img,'uint8') || any(img(:)>1))
+        wcolor=255;
+    else
+        wcolor=1;
+    end
+    
     if(nargin == 1)
         if(nd == 2)
-            bgcolor = 255;
+            bgcolor = wcolor;
         elseif(nd == 3)
-            bgcolor = [255 255 255];
+            bgcolor = [wcolor wcolor wcolor];
         end
     end
 
