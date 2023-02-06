@@ -10,6 +10,8 @@ function retval = display_atlas_blobs(roivals,atlasblobs,varargin)
 % atlasname = name of atlas to select if atlasblobs is an array
 % colormap = colormap name or Cx3 [r g b] colormap matrix
 % clim = [min max] value range
+% alpha = single global value or per-ROI value (0=transparent, 1=opaque)
+% alphalim = [min max] value range for scaling alpha (default=[0 1])
 % render = true/false. true = render all views off screen and return final
 %    composed image. False = return visible figure for rotation and viewing 
 % roimask = Rx1 vector of true/false to exclude some ROIs if needed
@@ -29,6 +31,7 @@ args.addParameter('atlasname',[]);
 args.addParameter('alpha',[]);
 args.addParameter('colormap',[]);
 args.addParameter('clim',[]);
+args.addParameter('alphalim',[0 1]);
 args.addParameter('render',false);
 args.addParameter('roimask',[]);
 args.addParameter('backgroundimage',true);
@@ -110,10 +113,14 @@ end
 
 if(isempty(args.alpha))
     alphavals=ones(size(roivals));
-elseif(numel(args.alpha)==1)
-    alphavals=args.alpha*ones(size(roivals));
 else
-    alphavals=args.alpha/max(args.alpha);
+    if(numel(args.alpha)==1)
+        alphavals=args.alpha*ones(size(roivals));
+    else
+        alphavals=args.alpha;
+    end
+    alphavals=(alphavals-args.alphalim(1))/abs(args.alphalim(2)-args.alphalim(1));
+    alphavals=min(max(0,alphavals),1);
 end
 
 background_nonrender_xposition=0;
@@ -214,6 +221,9 @@ for h = 1:numel(hemis)
             continue;
         end
         if(isnan(roivals(i)))
+            continue;
+        end
+        if(abs(alphavals(i))<eps)
             continue;
         end
         for ri = 1:numel(roi_idx)
