@@ -1,5 +1,5 @@
 function retval = display_atlas_blobs(roivals,atlasblobs,varargin)
-% img or fig = display_atlas_blobs(roivals,atlasblobs,'param',value,...)
+% img or fig = display_atlas_blobs(roivals,atlasblobs or name,'param',value,...)
 % 
 % Required inputs:
 % roivals = Rx1 vector with 1 value per ROI in atlasblobs 
@@ -27,7 +27,7 @@ function retval = display_atlas_blobs(roivals,atlasblobs,varargin)
 % figure handle if render=false
 
 args = inputParser;
-args.addParameter('atlasname',[]);
+args.addParameter('atlasname','');
 args.addParameter('alpha',[]);
 args.addParameter('colormap',[]);
 args.addParameter('clim',[]);
@@ -43,14 +43,18 @@ args.addParameter('view',[]);
 args.addParameter('render_viewnames',{'lateral','medial'});
 args.addParameter('crop',true);
 args.addParameter('hemi',{'lh','rh'});
+args.addParameter('noshading',false);
+args.addParameter('render_roi',false);
 
 args.parse(varargin{:});
 args = args.Results;
 
 [sourcedir,~,~]=fileparts(mfilename('fullpath'));
 
+atlasname=args.atlasname;
 if(ischar(atlasblobs))
-    atlasblobs=load_atlas_blobs(atlasblobs);
+    atlasname=atlasblobs;
+    atlasblobs=load_atlas_blobs(atlasname);
 end
 
 if(~isempty(args.atlasname) && numel(atlasblobs)>1)
@@ -59,6 +63,7 @@ if(~isempty(args.atlasname) && numel(atlasblobs)>1)
         error('Atlas %d not found: %s\n',args.atlasname);
     end
     
+    atlasname=args.atlasname;
     atlasblobs=atlasblobs(atlasidx);
 end
 
@@ -123,6 +128,12 @@ else
     alphavals=min(max(0,alphavals),1);
 end
 
+
+if(args.render_roi)
+    args.render=true;
+    args.noshading=false;
+end
+
 background_nonrender_xposition=0;
 
 roicolors = val2rgb(roivals,args.colormap,args.clim);
@@ -132,6 +143,7 @@ if(args.render)
 else
     fig=figure('color',args.backgroundcolor);
 end
+
 fig.InvertHardcopy = 'off';
 ax=axes(fig);
 axis(ax,'vis3d','equal','off');
@@ -142,9 +154,9 @@ set(ax,'NextPlot','add');
 %FVsph=struct('vertices',p,'faces',t);
 %roiradius=5*ones(size(roixyz,1),1);
 
-
-tmpd=tempname;
-mkdir(tmpd);
+%dont need this if we are using getframe()
+%tmpd=tempname; 
+%mkdir(tmpd);
 
 if(isempty(args.hemi) || isequal(args.hemi,'both'))
     hemis={'lh','rh'};
@@ -158,6 +170,11 @@ hcam=[];
 hs_bgslice=[];
 
 img_all={};
+roiimg_all={};
+roiimgmax_all={};
+roiimgmask_all={};
+bgimg_all={};
+
 for h = 1:numel(hemis)
     hemi=hemis{h};
     
@@ -321,41 +338,150 @@ for h = 1:numel(hemis)
         if(~isempty(hcam))
             delete(hcam);
         end
-        hcam=camlight(ax,'headlight');
+
         
-        tmpimgfile=sprintf('%s/atlasblob_%s_%s.png',tmpd,hemi,viewnames{i});
-        saveas(fig,tmpimgfile);
-        img_all{end+1}=imread(tmpimgfile);
-        
+        if(args.render_roi)
+            roi_bgcolor=[1 1 1];
+            roi_fgcolor=[0 0 0];
+            
+            hroi=arrayfun(@(x)findobj(fig,'tag',sprintf('roi%03d',x)),1:numel(roivals),'uniformoutput',false);
+
+            hcam=camlight(ax,'headlight');
+
+            %render the background image (or blank)
+            if(~isempty(hs_bgslice) && ishandle(hs_bgslice))
+                bgdata=get(hs_bgslice,'cdata');
+            end
+            set(fig,'color',args.backgroundcolor);
+            set(cat(1,hroi{:}),'visible','off');
+            bgimg_all{end+1}=frame2im(getframe(fig));
+            set(cat(1,hroi{:}),'visible','on');
+            if(~isempty(hs_bgslice) && ishandle(hs_bgslice))
+                set(hs_bgslice,'cdata',val2rgb(ones(size(get(hs_bgslice,'xdata'))),roi_bgcolor,[0 1]));
+            end
+
+            %now render the whole view with shading
+            set(fig,'color',roi_bgcolor);
+            set(cat(1,hroi{:}),'facecolor',roi_bgcolor);
+
+            img_all{end+1}=frame2im(getframe(fig));
+            
+
+            roiimg={};
+            fprintf('Rendering hemi %d/%d, view %d/%d, %d rois: \n',h,numel(hemis),i,numel(viewpoints),numel(roivals));
+            for ir = 1:numel(roivals)+1
+                roi_idx=find(atlasblobs.roilabels==ir);
+                
+
+                if(ir>numel(roivals))
+                    set(cat(1,hroi{:}),'facecolor',roi_fgcolor);
+                else
+                    fprintf('%d ',ir);
+                    htmp=hroi;
+                    htmp(ir)=[];
+                    set(cat(1,htmp{:}),'facecolor',roi_bgcolor);
+                    set(hroi{ir},'facecolor',roi_fgcolor);
+                end
+
+                img=frame2im(getframe(fig));
+                img=mean(double(img),3)/255;
+                roiimg{ir}=1-img;
+                
+                if(mod(ir,20)==0)
+                    fprintf('\n');
+                end
+            end
+            if(~isempty(hs_bgslice) && ishandle(hs_bgslice))
+                set(hs_bgslice,'cdata',bgdata);
+            end
+            fprintf('\n');
+            roiimg_mask=roiimg{numel(roivals)+1};
+            roiimg=roiimg(1:numel(roivals));
+            [roi_m,roi_midx]=max(cat(3,roiimg{:}),[],3);
+            roiimg_all{end+1}=roi_midx;
+            roiimgmax_all{end+1}=roi_m;
+            roiimgmask_all{end+1}=roiimg_mask;
+        else
+            if(~args.noshading)
+                hcam=camlight(ax,'headlight');
+            end
+            
+            %normal rendering
+
+            %tmpimgfile=sprintf('%s/atlasblob_%s_%s.png',tmpd,hemi,viewnames{i});
+            %saveas(fig,tmpimgfile);
+            %img_all{end+1}=imread(tmpimgfile);
+
+            img_all{end+1}=frame2im(getframe(fig));
+
+        end
     end
 end
 if(~args.render)
-    camlight(ax,'headlight');
-    RotationHeadlight(fig,true);
+    if(~args.noshading)
+        camlight(ax,'headlight');
+        RotationHeadlight(fig,true);
+    end
     retval=fig;
     return;
 end
 
 close(fig);
-rmdir(tmpd,'s');
+%rmdir(tmpd,'s'); %dont need if using getframe()
 
 if(args.crop)
     croprect={};
     for i = 1:numel(img_all)
         [~,croprect{i}] = CropBGColor(img_all{i},img_all{1}(1,1,:));
+        if(~isempty(bgimg_all{i}))
+            %if we have a background image (eg: when doing 'render_roi', crop based on max(img,background)?
+            [~,bgrect] = CropBGColor(bgimg_all{i},bgimg_all{1}(1,1,:));
+            if(~isempty(bgrect))
+                croprect{i}=[min(croprect{i}(1:2),bgrect(1:2)),max(croprect{i}(3:4),bgrect(3:4))];
+            end
+        end
     end
     croprect=cat(1,croprect{:});
     croprect=[min(croprect(:,1:2),[],1) max(croprect(:,3:4),[],1)];
     for i = 1:numel(img_all)
         img_all{i}=img_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
+        if(~isempty(roiimg_all))
+            roiimg_all{i}=roiimg_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
+            roiimgmax_all{i}=roiimgmax_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
+            roiimgmask_all{i}=roiimgmask_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
+            bgimg_all{i}=bgimg_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
+        end
     end
 end
 
+%array showing which view each part of the merged image came from
+imgnum_all=arrayfun(@(i)i*ones(size(img_all{i},1),size(img_all{i},2)),1:numel(img_all),'uniformoutput',false);
+
 if(numel(img_all)==4)
     img_new=[[img_all{1}; img_all{2}] [img_all{3}; img_all{4}]];
+    if(~isempty(roiimg_all))
+        roiimg_new=[[roiimg_all{1}; roiimg_all{2}] [roiimg_all{3}; roiimg_all{4}]];
+        roiimgmax_new=[[roiimgmax_all{1}; roiimgmax_all{2}] [roiimgmax_all{3}; roiimgmax_all{4}]];
+        roiimgmask_new=[[roiimgmask_all{1}; roiimgmask_all{2}] [roiimgmask_all{3}; roiimgmask_all{4}]];
+        bgimg_new=[[bgimg_all{1}; bgimg_all{2}] [bgimg_all{3}; bgimg_all{4}]];
+        imgnum_new=[[imgnum_all{1}; imgnum_all{2}] [imgnum_all{3}; imgnum_all{4}]];
+    end
 else
     img_new=cat(2,img_all{:});
+    if(~isempty(roiimg_all))
+        roiimg_new=cat(2,roiimg_all{:});
+        roiimgmax_new=cat(2,roiimgmax_all{:});
+        roiimgmask_new=cat(2,roiimgmask_all{:});
+        bgimg_new=cat(2,bgimg_all{:});
+        imgnum_new=cat(2,imgnum_all{:});
+    end
 end
 
-retval=img_new;
-%imwrite(img_new,sprintf('~/Downloads/%s_allviews.png',whichatlas));
+if(args.render_roi)
+    %img_shading=roiimgmax_new.*mean(double(img_new),3)/255;
+    img_shading=mean(double(img_new),3)/255;
+    bgimg_new=double(bgimg_new)/255;
+    retval=struct('atlasname',atlasname,'index',roiimg_new,'mask',roiimgmask_new,'shading',img_shading,'background',bgimg_new,'viewnumber',imgnum_new);
+else
+    retval=imgnew;
+end
