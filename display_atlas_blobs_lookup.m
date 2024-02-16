@@ -23,7 +23,8 @@ args.addParameter('clim',[]);
 args.addParameter('backgroundimage',false);
 args.addParameter('backgroundcolor',[1 1 1]);
 args.addParameter('crop',true);
-args.addParameter('noshading',false);
+args.addParameter('shadingalpha',1);
+args.addParameter('shadingexp',1);
 
 args.parse(varargin{:});
 args = args.Results;
@@ -44,6 +45,8 @@ if(isempty(args.clim))
     args.clim=[nanmin(roivals(:)) nanmax(roivals(:))];
 end
 
+args.shadingalpha=min(max(args.shadingalpha,0),1);
+
 img_val=roivals(atlasblobs_lookup.index);
 
 img=val2rgb(img_val,args.colormap,args.clim);
@@ -59,8 +62,8 @@ elseif(ischar(args.backgroundimage) && ~strcmpi(args.backgroundimage,'none'))
 end
 
 img=bsxfun(@times,img,atlasblobs_lookup.mask)+bsxfun(@times,bg_rgb,1-atlasblobs_lookup.mask);
-if(~args.noshading)
-    img=bsxfun(@times,img,atlasblobs_lookup.shading);
+if(args.shadingalpha>0)
+    img=bsxfun(@times,img,args.shadingalpha*(atlasblobs_lookup.shading).^args.shadingexp + (1-args.shadingalpha));
 end
 
 if(args.crop)
