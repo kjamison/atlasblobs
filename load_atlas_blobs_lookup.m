@@ -18,7 +18,7 @@ atlasblobfile_searchlist={atlasblobname,...
     sprintf('%s/lookups/atlasblobs_%s_lookup.mat',sourcedir,atlasblobname)};
 
 for i = 1:numel(atlasblobfile_searchlist)
-    if(exist(atlasblobfile_searchlist{i},'file'))
+    if(exist(atlasblobfile_searchlist{i},'file') && ~exist(atlasblobfile_searchlist{i},'dir'))
         atlasblobs=load(atlasblobfile_searchlist{i});
     end
 end

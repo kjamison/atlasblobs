@@ -433,7 +433,7 @@ if(args.crop)
     croprect={};
     for i = 1:numel(img_all)
         [~,croprect{i}] = CropBGColor(img_all{i},img_all{1}(1,1,:));
-        if(~isempty(bgimg_all{i}))
+        if(~isempty(bgimg_all) && ~isempty(bgimg_all{i}))
             %if we have a background image (eg: when doing 'render_roi', crop based on max(img,background)?
             [~,bgrect] = CropBGColor(bgimg_all{i},bgimg_all{1}(1,1,:));
             if(~isempty(bgrect))
@@ -483,5 +483,5 @@ if(args.render_roi)
     bgimg_new=double(bgimg_new)/255;
     retval=struct('atlasname',atlasname,'index',roiimg_new,'mask',roiimgmask_new,'shading',img_shading,'background',bgimg_new,'viewnumber',imgnum_new);
 else
-    retval=imgnew;
+    retval=img_new;
 end
