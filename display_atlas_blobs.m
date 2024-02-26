@@ -174,6 +174,7 @@ roiimg_all={};
 roiimgmax_all={};
 roiimgmask_all={};
 bgimg_all={};
+bgimgalpha_all={};
 
 for h = 1:numel(hemis)
     hemi=hemis{h};
@@ -355,6 +356,12 @@ for h = 1:numel(hemis)
             set(fig,'color',args.backgroundcolor);
             set(cat(1,hroi{:}),'visible','off');
             bgimg_all{end+1}=frame2im(getframe(fig));
+
+            
+            if(~isempty(hs_bgslice) && ishandle(hs_bgslice))
+                set(hs_bgslice,'cdata',repmat(bgslice_alphamap,[1 1 3]));
+                bgimgalpha_all{end+1}=frame2im(getframe(fig));
+            end
             set(cat(1,hroi{:}),'visible','on');
             if(~isempty(hs_bgslice) && ishandle(hs_bgslice))
                 set(hs_bgslice,'cdata',val2rgb(ones(size(get(hs_bgslice,'xdata'))),roi_bgcolor,[0 1]));
@@ -450,6 +457,7 @@ if(args.crop)
             roiimgmax_all{i}=roiimgmax_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
             roiimgmask_all{i}=roiimgmask_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
             bgimg_all{i}=bgimg_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
+            bgimgalpha_all{i}=bgimgalpha_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
         end
     end
 end
@@ -464,6 +472,7 @@ if(numel(img_all)==4)
         roiimgmax_new=[[roiimgmax_all{1}; roiimgmax_all{2}] [roiimgmax_all{3}; roiimgmax_all{4}]];
         roiimgmask_new=[[roiimgmask_all{1}; roiimgmask_all{2}] [roiimgmask_all{3}; roiimgmask_all{4}]];
         bgimg_new=[[bgimg_all{1}; bgimg_all{2}] [bgimg_all{3}; bgimg_all{4}]];
+        bgimgalpha_new=[[bgimgalpha_all{1}; bgimgalpha_all{2}] [bgimgalpha_all{3}; bgimgalpha_all{4}]];
         imgnum_new=[[imgnum_all{1}; imgnum_all{2}] [imgnum_all{3}; imgnum_all{4}]];
     end
 else
@@ -473,6 +482,7 @@ else
         roiimgmax_new=cat(2,roiimgmax_all{:});
         roiimgmask_new=cat(2,roiimgmask_all{:});
         bgimg_new=cat(2,bgimg_all{:});
+        bgimgalpha_new=cat(2,bgimgalpha_all{:});
         imgnum_new=cat(2,imgnum_all{:});
     end
 end
@@ -481,7 +491,8 @@ if(args.render_roi)
     %img_shading=roiimgmax_new.*mean(double(img_new),3)/255;
     img_shading=mean(double(img_new),3)/255;
     bgimg_new=double(bgimg_new)/255;
-    retval=struct('atlasname',atlasname,'index',roiimg_new,'mask',roiimgmask_new,'shading',img_shading,'background',bgimg_new,'viewnumber',imgnum_new);
+    bgimgalpha_new=mean(double(bgimgalpha_new),3)/255;
+    retval=struct('atlasname',atlasname,'index',roiimg_new,'mask',roiimgmask_new,'shading',img_shading,'background',bgimg_new,'background_mask',bgimgalpha_new,'viewnumber',imgnum_new);
 else
     retval=img_new;
 end

@@ -55,10 +55,13 @@ bg_rgb=val2rgb(ones(size(img_val)),args.backgroundcolor,[0 1]);
 
 if(~isempty(args.backgroundimage) && (isnumeric(args.backgroundimage) || islogical(args.backgroundimage)))
     if(args.backgroundimage>0)
-        bg_rgb=atlasblobs_lookup.background;
+        %bg_rgb=atlasblobs_lookup.background;
+        bg_rgb=bsxfun(@times,atlasblobs_lookup.background,atlasblobs_lookup.background_mask)+...
+            bsxfun(@times,bg_rgb,1-atlasblobs_lookup.background_mask);
     end
 elseif(ischar(args.backgroundimage) && ~strcmpi(args.backgroundimage,'none'))
-    bg_rgb=atlasblobs_lookup.background;
+    bg_rgb=bsxfun(@times,atlasblobs_lookup.background,atlasblobs_lookup.background_mask)+...
+        bsxfun(@times,bg_rgb,1-atlasblobs_lookup.background_mask);
 end
 
 img=bsxfun(@times,img,atlasblobs_lookup.mask)+bsxfun(@times,bg_rgb,1-atlasblobs_lookup.mask);
