@@ -1,4 +1,4 @@
-function img = display_atlas_blobs_lookup(roivals,atlasblobs_lookup,varargin)
+function varargout = display_atlas_blobs_lookup(roivals,atlasblobs_lookup,varargin)
 % img or fig = display_atlas_blobs_lookup(roivals,atlasblobs_lookup or name,'param',value,...)
 % 
 % Required inputs:
@@ -69,6 +69,7 @@ if(args.shadingalpha>0)
     img=bsxfun(@times,img,args.shadingalpha*(atlasblobs_lookup.shading).^args.shadingexp + (1-args.shadingalpha));
 end
 
+cropmask=true(size(img));
 if(args.crop)
     numviews=max(atlasblobs_lookup.viewnumber(:));
     imglist={};
@@ -96,6 +97,7 @@ if(args.crop)
         imglist{i}(:,croprect(4)+1:end,:,:)=nan;
         imgnew(mrect(1):mrect(3),mrect(2):mrect(4),:)=imglist{i};
     end
+    cropmask=all(~isnan(imgnew),3);
     %now remove nan rows/columns
     nancols=all(isnan(imgnew(:,:,1)),1);
     imgnew=imgnew(:,~nancols,:);
@@ -103,4 +105,21 @@ if(args.crop)
     imgnew=imgnew(~nanrows,:,:);
     
     img=imgnew;
+    
+    lookup_fields=fieldnames(atlasblobs_lookup);
+    for i = 1:numel(lookup_fields)
+        f=lookup_fields{i};
+        if(~(size(atlasblobs_lookup.(f),1)==size(cropmask,1) && size(atlasblobs_lookup.(f),2)==size(cropmask,2)))
+            continue;
+        end
+        v=atlasblobs_lookup.(f);
+        m=repmat(cropmask,1,1,size(v,3));
+        v=reshape(v(m),[size(img,1) size(img,2) size(v,3)]);
+        atlasblobs_lookup.(f)=v;
+    end
+end
+if nargout == 1
+    varargout={img};
+else
+    varargout={img,atlasblobs_lookup};
 end
