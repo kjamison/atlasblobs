@@ -25,7 +25,10 @@ args.addParameter('backgroundcolor',[1 1 1]);
 args.addParameter('crop',true);
 args.addParameter('shadingalpha',1);
 args.addParameter('shadingexp',1);
-
+args.addParameter('edgewidth',1);
+args.addParameter('edgealpha',0);
+args.addParameter('hemi','both');
+args.addParameter('horizontal',false);
 args.parse(varargin{:});
 args = args.Results;
 
@@ -44,6 +47,9 @@ end
 if(isempty(args.clim))
     args.clim=[nanmin(roivals(:)) nanmax(roivals(:))];
 end
+
+args.edgealpha=min(max(args.edgealpha,0),1);
+args.edgewidth=max(0,args.edgewidth);
 
 args.shadingalpha=min(max(args.shadingalpha,0),1);
 
@@ -69,8 +75,18 @@ if(args.shadingalpha>0)
     img=bsxfun(@times,img,args.shadingalpha*(atlasblobs_lookup.shading).^args.shadingexp + (1-args.shadingalpha));
 end
 
+if(isfield(atlasblobs_lookup,'roiedges') && args.edgealpha>0 && args.edgewidth>0)
+    if(args.edgewidth>1)
+        imgedge=imdilate(atlasblobs_lookup.roiedges,strel('disk',args.edgewidth-1));
+    else
+        imgedge=atlasblobs_lookup.roiedges;
+    end
+    imgedge=1-imgedge;
+    img=bsxfun(@times,img,args.edgealpha*(imgedge) + (1-args.edgealpha));
+end
+
 cropmask=true(size(img));
-if(args.crop)
+if(args.crop || ~strcmpi(args.hemi,'both'))
     numviews=max(atlasblobs_lookup.viewnumber(:));
     imglist={};
     croprect={};
@@ -83,7 +99,32 @@ if(args.crop)
         mrect = [min(fgx) min(fgy) max(fgx) max(fgy)];
         viewrect{i}=mrect;
         imglist{i}=img(mrect(1):mrect(3),mrect(2):mrect(4),:);
-        [~,croprect{i}]=CropBGColor(imglist{i},imglist{i}(1,1,:));
+        
+        if(args.crop)
+            [~,croprect{i}]=CropBGColor(imglist{i},imglist{i}(1,1,:));
+        else
+            croprect{i}=[1 1 size(imglist{i},1) size(imglist{i},2)];
+        end
+    end
+
+    keepviews=1:numviews;
+
+    if(args.horizontal)
+        tmp1=imglist{3};
+        imglist{3}=imglist{2};
+        imglist{2}=tmp1;
+
+        if(ismember(lower(args.hemi),{'l','lh','left'}))
+            keepviews=[1 3];
+        elseif(ismember(lower(args.hemi),{'r','rh','right'}))
+            keepviews=[2 4];
+        end
+    else
+        if(ismember(lower(args.hemi),{'l','lh','left'}))
+            keepviews=[1 2];
+        elseif(ismember(lower(args.hemi),{'r','rh','right'}))
+            keepviews=[3 4];
+        end
     end
     croprect=cat(1,croprect{:});
     croprect=[min(croprect(:,1:2),[],1) max(croprect(:,3:4),[],1)];
@@ -95,6 +136,11 @@ if(args.crop)
         imglist{i}(:,1:croprect(2),:,:)=nan;
         imglist{i}(croprect(3)+1:end,:,:)=nan;
         imglist{i}(:,croprect(4)+1:end,:,:)=nan;
+
+        
+        if(~ismember(i,keepviews))
+            continue;
+        end
         imgnew(mrect(1):mrect(3),mrect(2):mrect(4),:)=imglist{i};
     end
     cropmask=all(~isnan(imgnew),3);

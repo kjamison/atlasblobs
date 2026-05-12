@@ -30,7 +30,7 @@ for i = 1:numel(imgs)
     end
 
     bgcolor = squeeze(bgcolor);
-    if(numel(bgcolor) < nd)
+    if(nd > 2 && numel(bgcolor) < nd)
         bgcolor = repmat(bgcolor,1,nd);
     end
 

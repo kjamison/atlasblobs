@@ -42,9 +42,11 @@ args.addParameter('surfacesmoothing',0);
 args.addParameter('view',[]);
 args.addParameter('render_viewnames',{'lateral','medial'});
 args.addParameter('crop',true);
+args.addParameter('crop_padding',0);
 args.addParameter('hemi',{'lh','rh'});
 args.addParameter('noshading',false);
 args.addParameter('render_roi',false);
+args.addParameter('roiedgewidth',1);
 
 args.parse(varargin{:});
 args = args.Results;
@@ -173,6 +175,7 @@ img_all={};
 roiimg_all={};
 roiimgmax_all={};
 roiimgmask_all={};
+roiimgborder_all={};
 bgimg_all={};
 bgimgalpha_all={};
 
@@ -375,8 +378,15 @@ for h = 1:numel(hemis)
             
 
             roiimg={};
-            fprintf('Rendering hemi %d/%d, view %d/%d, %d rois: \n',h,numel(hemis),i,numel(viewpoints),numel(roivals));
+            numroi_to_render=numel(roivals);
+            if(~isempty(args.roimask))
+                numroi_to_render=sum(args.roimask);
+            end
+            fprintf('Rendering hemi %d/%d, view %d/%d, %d rois: \n',h,numel(hemis),i,numel(viewpoints),numroi_to_render);
             for ir = 1:numel(roivals)+1
+                if(~isempty(args.roimask) && ir<=numel(args.roimask) && ~args.roimask(ir))
+                    continue;
+                end
                 roi_idx=find(atlasblobs.roilabels==ir);
                 
 
@@ -408,6 +418,15 @@ for h = 1:numel(hemis)
             roiimg_all{end+1}=roi_midx;
             roiimgmax_all{end+1}=roi_m;
             roiimgmask_all{end+1}=roiimg_mask;
+
+            roiedges=false(size(roi_midx));
+            if(args.roiedgewidth>0)
+                roiedges=boundarymask(roi_midx.*roiimg_mask);
+                if(args.roiedgewidth>1)
+                    roiedges=imdilate(roiedges,strel('disk',args.roiedgewidth-1));
+                end
+            end
+            roiimgborder_all{end+1}=roiedges;
         else
             if(~args.noshading)
                 hcam=camlight(ax,'headlight');
@@ -440,6 +459,12 @@ if(args.crop)
     croprect={};
     for i = 1:numel(img_all)
         [~,croprect{i}] = CropBGColor(img_all{i},img_all{1}(1,1,:));
+        if(~isempty(roiimgborder_all) && ~isempty(roiimgborder_all{i}) && any(roiimgborder_all{i},'all'))
+            [~,edgerect] = CropBGColor(roiimgborder_all{i},false);
+            if(~isempty(edgerect))
+                croprect{i}=[min(croprect{i}(1:2),edgerect(1:2)),max(croprect{i}(3:4),edgerect(3:4))];
+            end
+        end
         if(~isempty(bgimg_all) && ~isempty(bgimg_all{i}))
             %if we have a background image (eg: when doing 'render_roi', crop based on max(img,background)?
             [~,bgrect] = CropBGColor(bgimg_all{i},bgimg_all{1}(1,1,:));
@@ -450,14 +475,22 @@ if(args.crop)
     end
     croprect=cat(1,croprect{:});
     croprect=[min(croprect(:,1:2),[],1) max(croprect(:,3:4),[],1)];
+    if(args.crop_padding>0)
+        croprect=croprect+[-1*args.crop_padding -1*args.crop_padding args.crop_padding args.crop_padding];
+        croprect(1:2)=max(croprect(1:2),1);
+        croprect(3)=min(croprect(3),size(img_all{1},1));
+        croprect(4)=min(croprect(4),size(img_all{1},2));
+    end
     for i = 1:numel(img_all)
         img_all{i}=img_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
         if(~isempty(roiimg_all))
             roiimg_all{i}=roiimg_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
             roiimgmax_all{i}=roiimgmax_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
             roiimgmask_all{i}=roiimgmask_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
+            roiimgborder_all{i}=roiimgborder_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
             bgimg_all{i}=bgimg_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
             bgimgalpha_all{i}=bgimgalpha_all{i}(croprect(1):croprect(3),croprect(2):croprect(4),:);
+            
         end
     end
 end
@@ -471,6 +504,7 @@ if(numel(img_all)==4)
         roiimg_new=[[roiimg_all{1}; roiimg_all{2}] [roiimg_all{3}; roiimg_all{4}]];
         roiimgmax_new=[[roiimgmax_all{1}; roiimgmax_all{2}] [roiimgmax_all{3}; roiimgmax_all{4}]];
         roiimgmask_new=[[roiimgmask_all{1}; roiimgmask_all{2}] [roiimgmask_all{3}; roiimgmask_all{4}]];
+        roiimgborder_new=[[roiimgborder_all{1}; roiimgborder_all{2}] [roiimgborder_all{3}; roiimgborder_all{4}]];
         bgimg_new=[[bgimg_all{1}; bgimg_all{2}] [bgimg_all{3}; bgimg_all{4}]];
         bgimgalpha_new=[[bgimgalpha_all{1}; bgimgalpha_all{2}] [bgimgalpha_all{3}; bgimgalpha_all{4}]];
         imgnum_new=[[imgnum_all{1}; imgnum_all{2}] [imgnum_all{3}; imgnum_all{4}]];
@@ -481,6 +515,7 @@ else
         roiimg_new=cat(2,roiimg_all{:});
         roiimgmax_new=cat(2,roiimgmax_all{:});
         roiimgmask_new=cat(2,roiimgmask_all{:});
+        roiimgborder_new=cat(2,roiimgborder_all{:});
         bgimg_new=cat(2,bgimg_all{:});
         bgimgalpha_new=cat(2,bgimgalpha_all{:});
         imgnum_new=cat(2,imgnum_all{:});
@@ -492,7 +527,7 @@ if(args.render_roi)
     img_shading=mean(double(img_new),3)/255;
     bgimg_new=double(bgimg_new)/255;
     bgimgalpha_new=mean(double(bgimgalpha_new),3)/255;
-    retval=struct('atlasname',atlasname,'index',roiimg_new,'mask',roiimgmask_new,'shading',img_shading,'background',bgimg_new,'background_mask',bgimgalpha_new,'viewnumber',imgnum_new);
+    retval=struct('atlasname',atlasname,'index',roiimg_new,'mask',roiimgmask_new,'shading',img_shading,'roiedges',roiimgborder_new,'background',bgimg_new,'background_mask',bgimgalpha_new,'viewnumber',imgnum_new);
 else
     retval=img_new;
 end
